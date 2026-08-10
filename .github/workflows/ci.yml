@@ -31,7 +31,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install ruff==0.6.9
+      # Pinned so CI and local runs agree; 0.6.x still carried the since-removed
+      # UP038 rule and failed on code that current ruff accepts.
+      - run: python -m pip install ruff==0.16.2
       - name: Ruff (lint)
         run: ruff check app tests --output-format=github
       - name: Ruff (format)
@@ -130,7 +132,9 @@ jobs:
         run: bandit -c pyproject.toml -r app -ll
 
       - name: pip-audit (known CVEs in dependencies)
-        run: pip-audit --strict --progress-spinner off
+        # --skip-editable: this project is installed with `-e .` and is not on
+        # PyPI, and under --strict an unresolvable dependency is a hard failure.
+        run: pip-audit --strict --skip-editable --progress-spinner off
 
       - name: Fail on committed secrets
         run: |
