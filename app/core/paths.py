@@ -44,6 +44,9 @@ _WINDOWS_RESERVED: Final[frozenset[str]] = frozenset(
 
 _UNSAFE_NAME_CHARS: Final[re.Pattern[str]] = re.compile(r'[\x00-\x1f<>:"|?*\\/]')
 
+#: Both path separators, so traversal is detected the same way on POSIX and NT.
+_SEPARATORS: Final[re.Pattern[str]] = re.compile(r"[\\/]")
+
 
 def is_within(candidate: Path, root: Path) -> bool:
     """True when ``candidate`` is ``root`` itself or lives beneath it."""
@@ -75,6 +78,15 @@ def resolve_within(
     raw = str(candidate)
     if "\x00" in raw:
         raise PathTraversalError("path contains a NUL byte")
+
+    # ``Path.resolve()`` only understands the *native* separator, so on POSIX a
+    # Windows-style "..\\..\\etc" is a single odd filename that lands inside the
+    # root and slips past the containment check below.  Rejecting a literal
+    # parent segment under either separator makes traversal fail identically on
+    # every platform — which matters because ingestion accepts paths that
+    # originate on Windows hosts but runs on Linux.
+    if any(segment == ".." for segment in _SEPARATORS.split(raw)):
+        raise PathTraversalError("path contains a parent-directory segment", path=raw)
 
     path = Path(raw).expanduser()
     if not allow_symlinks:
