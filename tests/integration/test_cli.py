@@ -163,6 +163,18 @@ class TestPlugins:
         assert any(entry["name"] == "json" for entry in payload["parsers"])
         assert "ingest" in payload["jobs"]
 
+    def test_json_output_is_never_colourised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``--json`` must stay parseable even when colour is forced on.
+
+        Many CI images export FORCE_COLOR=1.  Rich would then syntax-highlight
+        the JSON, and ANSI escapes in stdout break ``--json | jq``.
+        """
+        monkeypatch.setenv("FORCE_COLOR", "1")
+        result = runner.invoke(app, ["plugins", "--json"])
+        assert result.exit_code == EXIT_OK
+        assert "\x1b[" not in result.stdout
+        json.loads(result.stdout)
+
 
 class TestJobs:
     def test_run_a_registered_job(self, cli_env: Path) -> None:

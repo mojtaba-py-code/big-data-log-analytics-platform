@@ -62,10 +62,22 @@ def _settings(config: Path | None = None, overrides: dict[str, Any] | None = Non
     return settings
 
 
+def _write_json(text: str) -> None:
+    """Write JSON to stdout unstyled.
+
+    ``Console.print_json`` syntax-highlights what it prints.  Rich normally
+    drops the colour when stdout is not a terminal, but anything that forces it
+    on — ``FORCE_COLOR=1`` is set by default in many CI images — puts ANSI
+    escapes in stdout and ``--json | jq`` then chokes on output that is no
+    longer JSON.  Machine-readable output must stay machine-readable.
+    """
+    sys.stdout.write(text + "\n")
+
+
 def _emit(payload: Any, as_json: bool, title: str = "") -> None:
     """Print a result either as JSON or as a Rich table."""
     if as_json:
-        console.print_json(json_module.dumps(payload, default=str))
+        _write_json(json_module.dumps(payload, default=str, indent=2))
         return
     if isinstance(payload, dict):
         table = Table(title=title or None, show_header=False, box=None, pad_edge=False)
@@ -400,7 +412,7 @@ def report(
         console.print(f"[green]written[/green] {path}")
         return
     if fmt is OutputFormat.JSON:
-        console.print_json(render_json(report_obj))
+        _write_json(render_json(report_obj))
     else:
         console.print(render_markdown(report_obj))
 
@@ -586,7 +598,7 @@ def config_show(
     config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
 ) -> None:
     """Print the effective configuration (secrets redacted)."""
-    console.print_json(json_module.dumps(_settings(config).safe_dump(), default=str))
+    _write_json(json_module.dumps(_settings(config).safe_dump(), default=str, indent=2))
 
 
 @config_app.command("validate")
