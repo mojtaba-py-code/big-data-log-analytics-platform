@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# Least privilege: the pipeline only reads the repository.  Jobs that need more
+# (publishing, releases) request it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install ruff==0.6.9
+      - name: Ruff (lint)
+        run: ruff check app tests --output-format=github
+      - name: Ruff (format)
+        run: ruff format --check app tests
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev,postgres,api]"
+      - name: MyPy (strict)
+        run: mypy app
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: loganalytics_test
+          POSTGRES_USER: loganalytics
+          POSTGRES_PASSWORD: ci-only-not-a-real-secret
+        options: >-
+          --health-cmd "pg_isready -U loganalytics"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install -e ".[dev,postgres,api]"
+
+      - name: Unit tests
+        run: pytest tests/unit -q --cov=app --cov-report=xml --cov-report=term
+
+      - name: Integration tests
+        env:
+          LOGA_DATABASE__DRIVER: postgresql
+          LOGA_DATABASE__HOST: localhost
+          LOGA_DATABASE__NAME: loganalytics_test
+          LOGA_DATABASE__USER: loganalytics
+          LOGA_DATABASE__PASSWORD: ci-only-not-a-real-secret
+          LOGA_CACHE__BACKEND: redis
+          LOGA_CACHE__REDIS_HOST: localhost
+        run: pytest tests/integration -q --cov=app --cov-append --cov-report=xml
+
+      - name: Security tests
+        run: pytest tests/security -q --cov=app --cov-append --cov-report=xml
+
+      - name: Enforce coverage floor
+        run: coverage report --fail-under=80
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: coverage
+          path: coverage.xml
+          retention-days: 7
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+
+      - name: Bandit (static analysis)
+        run: bandit -c pyproject.toml -r app -ll
+
+      - name: pip-audit (known CVEs in dependencies)
+        run: pip-audit --strict --progress-spinner off
+
+      - name: Fail on committed secrets
+        run: |
+          # A cheap, dependency-free guard.  It complements (not replaces) a
+          # scanner such as gitleaks in the org-level pipeline.
+          if git grep -nIE '(api[_-]?key|password|secret|token)[[:space:]]*[:=][[:space:]]*["'"'"'][A-Za-z0-9/+=_-]{16,}' \
+               -- ':!*.example' ':!tests/*' ':!docs/*' ':!*.md'; then
+            echo "::error::a credential-looking literal was found in tracked source"
+            exit 1
+          fi
+
+  performance:
+    name: Performance smoke test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Streaming and throughput properties
+        run: pytest tests/performance -q -m performance
+      - name: Benchmark (small dataset)
+        run: python benchmarks/benchmark.py --records 50000 --output benchmarks/results/ci.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark
+          path: benchmarks/results/ci.json
+          retention-days: 14
+
+  docker:
+    name: Build container image
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, security]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: big-data-log-analytics:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke-test the image
+        run: |
+          docker run --rm big-data-log-analytics:${{ github.sha }} --version
+          docker run --rm big-data-log-analytics:${{ github.sha }} plugins --json > /dev/null
+      - name: Verify the image does not run as root
+        run: |
+          user=$(docker run --rm --entrypoint id big-data-log-analytics:${{ github.sha }} -u)
+          test "$user" != "0" || { echo "::error::image runs as root"; exit 1; }
