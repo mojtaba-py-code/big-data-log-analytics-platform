@@ -1,0 +1,139 @@
+# Big Data Log Analytics Platform — default configuration.
+#
+# Precedence (lowest to highest):
+#   1. built-in defaults in app/core/config.py
+#   2. this file (LOGA_CONFIG_FILE=configs/default.yaml)
+#   3. environment variables (LOGA_<SECTION>__<KEY>)
+#
+# NEVER put credentials here.  Every secret field reads from the environment:
+#   LOGA_DATABASE__PASSWORD, LOGA_CACHE__REDIS_PASSWORD, LOGA_API__API_KEYS
+
+environment: development
+debug: false
+
+storage:
+  data_root: data
+  format: parquet          # parquet | jsonl | csv
+  compression: zstd        # zstd | snappy | gzip | none
+  write_batch_size: 50000  # rows buffered before a Parquet row-group is flushed
+  partition_by: [year, month, day]
+
+processing:
+  batch_size: 10000
+  workers: 4
+  max_line_bytes: 1048576  # 1 MiB; longer lines are truncated and reported
+  error_threshold: 0.5     # abort the run above this rejection rate
+  format_sample_lines: 25
+  encoding: utf-8
+  encoding_errors: replace
+
+deduplication:
+  strategy: content_hash   # none | event_id | content_hash | fields
+  fields: [timestamp, service, level, message]
+  max_tracked_keys: 1000000  # ~120 MB of Python objects; see docs/PERFORMANCE.md
+  keep_duplicates: false
+
+validation:
+  require_timestamp: true
+  require_message: false
+  max_future_skew_seconds: 300
+  max_age_days: 3650
+  max_message_length: 32768
+
+masking:
+  enabled: true
+  rules:
+    - authorization_header
+    - sensitive_kv
+    - jwt
+    - vendor_key
+    - private_key_block
+    - email
+  # Add credit_card / phone for stricter PII handling; both are aggressive and
+  # will redact long numeric identifiers.
+  extra_fields: []
+  mask_raw_message: true
+
+analytics:
+  enable_anomaly_detection: true
+  default_window: 5m       # 1m | 5m | 15m | 1h | 6h | 1d
+  zscore_threshold: 3.0
+  iqr_multiplier: 1.5
+  moving_average_window: 12
+  min_history_points: 10
+  engine: duckdb
+  max_query_rows: 10000
+  query_timeout_seconds: 30
+
+security_analytics:
+  enabled: true
+  failed_auth_threshold: 5
+  failed_auth_window_seconds: 300
+  not_found_threshold: 25
+  request_rate_threshold: 300
+
+database:
+  driver: sqlite           # sqlite | postgresql | mysql
+  sqlite_path: data/metadata.db
+  host: localhost
+  port: 5432
+  name: loganalytics
+  user: loganalytics
+  # password: set LOGA_DATABASE__PASSWORD in the environment
+  pool_size: 5
+  echo: false
+
+cache:
+  backend: memory          # memory | redis
+  redis_host: localhost
+  redis_port: 6379
+  redis_db: 0
+  namespace: loga
+  default_ttl_seconds: 300
+  max_entries: 10000
+
+api:
+  host: 127.0.0.1          # 0.0.0.0 only behind a proxy or inside a container
+  port: 8000
+  docs_enabled: true
+  auth_required: true
+  # api_keys: set LOGA_API__API_KEYS='["<key>"]', or mint keys with
+  #   loganalytics apikey create <name> --scopes read,write
+  cors_origins: []
+  trusted_proxies: []      # e.g. ["10.0.0.0/8"] to honour X-Forwarded-For
+  rate_limit_requests: 120
+  rate_limit_window_seconds: 60
+  rate_limit_burst: 20
+  max_page_size: 1000
+  default_page_size: 50
+  max_request_bytes: 1048576
+  enable_dashboard: true
+  hsts_enabled: false
+
+observability:
+  level: INFO              # DEBUG leaks payloads; never use it in production
+  format: json             # json | console
+  service_name: log-analytics
+  include_caller: true
+  metrics_enabled: true
+
+workers:
+  backend: thread          # thread | process | celery
+  concurrency: 2
+  job_timeout_seconds: 3600
+  max_retries: 3
+  retry_backoff_seconds: 1.0
+
+streaming:
+  enabled: false
+  brokers: ["localhost:9092"]
+  topic: logs
+  group_id: log-analytics
+
+ingestion:
+  allowed_roots: []        # empty means storage.data_root only
+  follow_symlinks: false
+  allow_private_network_sources: false
+  http_timeout_seconds: 30
+  http_max_bytes: 268435456
+  db_fetch_size: 5000

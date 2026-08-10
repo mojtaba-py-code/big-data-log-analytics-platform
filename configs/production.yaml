@@ -1,0 +1,88 @@
+# Production overlay.
+#
+# Loading this file with environment=production activates the hardening checks
+# in app/core/config.py: the process refuses to start if authentication is off,
+# masking is disabled, CORS is a wildcard, docs are exposed or the log level is
+# DEBUG.  A misconfigured deployment fails loudly at boot rather than quietly
+# serving every log line to the internet.
+#
+# Required environment variables:
+#   LOGA_DATABASE__PASSWORD      PostgreSQL password
+#   LOGA_CACHE__REDIS_PASSWORD   Redis password
+#   LOGA_API__API_KEY_HASHES     '["sha256:<hex>", ...]'  (preferred)
+#     or LOGA_API__API_KEYS      '["<plaintext>"]'        (simpler, weaker)
+
+environment: production
+debug: false
+
+storage:
+  data_root: /var/lib/loganalytics
+  format: parquet
+  compression: zstd
+  write_batch_size: 100000
+  partition_by: [year, month, day]
+
+processing:
+  batch_size: 50000
+  workers: 8
+  max_line_bytes: 1048576
+  error_threshold: 0.25    # tighter than development: fail fast on bad feeds
+
+deduplication:
+  strategy: content_hash
+  max_tracked_keys: 5000000
+
+masking:
+  enabled: true
+  mask_raw_message: true
+
+database:
+  driver: postgresql
+  host: postgres
+  port: 5432
+  name: loganalytics
+  user: loganalytics       # grant SELECT/INSERT on the metadata schema only
+  pool_size: 10
+
+cache:
+  backend: redis
+  redis_host: redis
+  redis_port: 6379
+  redis_tls: true
+  default_ttl_seconds: 300
+  max_entries: 50000
+
+api:
+  host: 0.0.0.0            # inside a container, behind a reverse proxy
+  port: 8000
+  docs_enabled: false      # do not publish a map of the attack surface
+  auth_required: true
+  cors_origins: ["https://logs.example.com"]
+  trusted_proxies: ["10.0.0.0/8"]
+  rate_limit_requests: 300
+  rate_limit_window_seconds: 60
+  max_page_size: 500
+  hsts_enabled: true
+  enable_dashboard: true
+
+observability:
+  level: INFO
+  format: json
+  file: /var/log/loganalytics/app.log
+  max_file_bytes: 52428800
+  backup_count: 10
+
+workers:
+  backend: celery
+  concurrency: 4
+  # broker_url: set LOGA_WORKERS__BROKER_URL
+
+analytics:
+  enable_anomaly_detection: true
+  default_window: 5m
+  max_query_rows: 50000
+
+ingestion:
+  allowed_roots: ["/var/log", "/var/lib/loganalytics/raw"]
+  follow_symlinks: false
+  allow_private_network_sources: false
