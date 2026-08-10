@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -467,3 +469,27 @@ class TestMetrics:
         metrics = MetricsRegistry()
         metrics.increment("records")
         assert "loga_records_total 1" in metrics.to_prometheus()
+
+
+class TestImportOrder:
+    """``app.analytics`` and ``app.anomaly_detection`` reference each other.
+
+    Whichever is imported first has to win.  The suite happens to reach
+    ``app.analytics`` first, so a cycle between them stays invisible here and
+    only surfaces at a different entry point — it broke the container image,
+    where the CLI reaches ``app.anomaly_detection`` first.  Each package is
+    therefore imported first in its own interpreter.
+    """
+
+    @pytest.mark.parametrize(
+        "module",
+        ["app.anomaly_detection", "app.analytics", "app.cli.main", "app.api"],
+    )
+    def test_package_imports_standalone(self, module: str) -> None:
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, "-c", f"import {module}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr

@@ -14,16 +14,18 @@ import json
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.analytics.engine import AnalyticsEngine
 from app.analytics.security import SecurityAnalyzer
-from app.anomaly_detection.service import AnomalyService
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
 from app.core.paths import ensure_directory, safe_filename
 from app.core.timeutil import parse_range, to_iso, utcnow
 from app.models.analytics import Report, TimeRange
+
+if TYPE_CHECKING:
+    from app.anomaly_detection.service import AnomalyService
 
 log = get_logger(__name__)
 
@@ -38,6 +40,14 @@ class ReportBuilder:
         anomalies: AnomalyService | None = None,
         security: SecurityAnalyzer | None = None,
     ) -> None:
+        # Imported here, not at module scope: app.anomaly_detection.detectors
+        # pulls in app.analytics.statistics, which runs this package's __init__,
+        # which imports this module.  Whichever of the two packages is imported
+        # first wins, so a module-level import made `import app.anomaly_detection`
+        # fail with a partially-initialised `detectors` — as it did inside the
+        # container image, where the CLI entrypoint reaches it first.
+        from app.anomaly_detection.service import AnomalyService
+
         self.settings = settings or get_settings()
         self.analytics = analytics or AnalyticsEngine(settings=self.settings)
         self.anomalies = anomalies or AnomalyService(self.analytics, self.settings)
