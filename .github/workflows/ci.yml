@@ -132,9 +132,11 @@ jobs:
         run: bandit -c pyproject.toml -r app -ll
 
       - name: pip-audit (known CVEs in dependencies)
-        # --skip-editable: this project is installed with `-e .` and is not on
-        # PyPI, and under --strict an unresolvable dependency is a hard failure.
-        run: pip-audit --strict --skip-editable --progress-spinner off
+        # This project is installed with `-e .` and is not on PyPI, so it can
+        # never be resolved: --skip-editable passes over it.  --strict is left
+        # off because it makes *any* skip fatal, including that one; a real
+        # vulnerability still fails the job on its own exit code.
+        run: pip-audit --skip-editable --progress-spinner off
 
       - name: Fail on committed secrets
         run: |
