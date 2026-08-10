@@ -1,0 +1,135 @@
+# Full development environment:  docker compose up
+#
+#   api        FastAPI + dashboard on http://localhost:8000/dashboard
+#   worker     Celery worker for background jobs
+#   postgres   metadata store (job runs, checkpoints, API keys)
+#   redis      analytics cache and Celery broker
+#   kafka      optional streaming source   (profile: streaming)
+#
+# Secrets come from .env (copy .env.example).  Nothing here contains a
+# credential, and every service runs as a non-root user.
+
+name: log-analytics
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    LOGA_ENVIRONMENT: ${LOGA_ENVIRONMENT:-development}
+    LOGA_CONFIG_FILE: configs/default.yaml
+    LOGA_STORAGE__DATA_ROOT: /data
+    LOGA_DATABASE__DRIVER: postgresql
+    LOGA_DATABASE__HOST: postgres
+    LOGA_DATABASE__NAME: ${POSTGRES_DB:-loganalytics}
+    LOGA_DATABASE__USER: ${POSTGRES_USER:-loganalytics}
+    LOGA_DATABASE__PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    LOGA_CACHE__BACKEND: redis
+    LOGA_CACHE__REDIS_HOST: redis
+    LOGA_WORKERS__BROKER_URL: redis://redis:6379/1
+    LOGA_API__API_KEYS: ${LOGA_API_KEYS:?set LOGA_API_KEYS in .env}
+    LOGA_INGESTION__ALLOWED_ROOTS: '["/data","/logs"]'
+  volumes:
+    - log-data:/data
+    - ./data/raw:/logs:ro          # drop files here to ingest them
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  api:
+    <<: *common
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8000:8000"      # loopback only; put a TLS proxy in front
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *common
+    command:
+      - "job"
+      - "run"
+      - "detect_anomalies"
+    # Replace with a Celery worker for a real deployment:
+    #   entrypoint: ["celery"]
+    #   command: ["-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "-c", "2"]
+    profiles: ["workers"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-loganalytics}
+      POSTGRES_USER: ${POSTGRES_USER:-loganalytics}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # scram-sha-256 rather than md5: md5 is trivially crackable offline.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loganalytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    # Not published: only the compose network needs it.
+    expose:
+      - "5432"
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "1"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "6379"
+
+  kafka:
+    image: bitnami/kafka:3.7
+    profiles: ["streaming"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    expose:
+      - "9092"
+    restart: unless-stopped
+
+volumes:
+  log-data:
+  postgres-data:
+  redis-data:
+  kafka-data:
