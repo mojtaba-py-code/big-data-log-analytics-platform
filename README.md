@@ -377,8 +377,19 @@ Analytical queries over the resulting 100 k-record dataset:
 Parquet + zstd compressed the 45 MB JSONL source to 11.9 MB (**3.8x**), and every
 analytics view answered in **28-172 ms**.
 
-Memory is flat: ingesting 10x the data adds tens of megabytes, not 10x the RSS,
-because the pipeline is a chain of generators and the writer buffers by row-group.
+Memory grows far more slowly than the input, because the pipeline is a chain of
+generators and the writer buffers by row-group. Two end-to-end runs on the same
+machine:
+
+| Records written | Source | Peak RSS | Throughput |
+| ---: | ---: | ---: | ---: |
+| 118,783 | 54 MiB | 303 MiB | 1,239 rec/s |
+| 475,144 | 216 MiB | 395 MiB | 1,486 rec/s |
+
+**4.0x the data cost 1.3x the memory.** It is not literally constant — the
+deduplication index and the aggregation buffers do grow — but nothing holds the
+dataset, so RSS tracks the working set rather than the file. Throughput improves
+slightly at the larger size because the fixed start-up cost is amortised.
 
 ```bash
 python benchmarks/benchmark.py --records 1000000 --output benchmarks/results/run.json
