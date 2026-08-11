@@ -142,6 +142,44 @@ full pipeline, queries it, detects the anomalies, scores the attacks, writes a
 report, proves no credential reached storage, and leaves the API and dashboard
 running on <http://127.0.0.1:8000/dashboard>.
 
+Real output from a 120,000-record run on a 2014 dual-core laptop — abridged, but
+the numbers are not adjusted:
+
+```text
+STEP 2: Ingest: parse -> clean -> normalise -> enrich -> validate -> dedup -> Parquet
+    lines read                         122,448
+    records written                    118,783
+    duplicates removed                 2,448
+    records rejected                   1,217
+    throughput                         1,239 records/s
+    peak RSS                           303 MiB
+    parquet size                       13.9 MiB (3.9x smaller)
+
+    Nothing was silently dropped - every rejection is in the DLQ:
+      unparseable                      1,217
+
+STEP 6: Anomaly detection
+    anomalies found                    70
+      2026-08-10T21:15:00Z  server_errors  observed 1,407.0  expected 23.0  [critical]
+      2026-08-10T12:30:00Z  errors         observed   387.0  expected 51.2  [critical]
+
+    These correspond to the incidents injected into the dataset, found
+    without any labels or training data.
+
+STEP 8: Search
+      level=ERROR                        10,962 matches in    129 ms
+      status_code>=500                    9,428 matches in     84 ms
+      service=auth AND status_code=401      286 matches in     88 ms
+      endpoint~/api/v1/*                112,791 matches in    115 ms
+
+STEP 10: Verify: no secrets reached storage
+    injected credentials               4
+    found in Parquet                   none - all redacted on ingest
+    redaction markers present          True
+
+  Demo complete in 114.4 s
+```
+
 ### Or step by step
 
 ```bash
@@ -276,6 +314,22 @@ It is one HTML file with hand-written SVG charting and no external requests, so
 the API can keep a strict `default-src 'self'` CSP. A dashboard that renders
 attacker-controlled log text is exactly where a relaxed CSP turns a stored XSS
 into an account takeover; every value is inserted with `textContent`.
+
+Below is the dashboard over the demo dataset — 117,796 records ingested from
+120,000 generated lines. The three spikes in the charts are the incidents the
+generator injected, and they are what the detectors below found.
+
+![Dashboard: headline tiles, requests/errors/latency over time, status
+distribution, top endpoints and addresses, and per-service health](docs/images/dashboard.png)
+
+Anomalies are found without labels or training data — each row carries the
+observed value, what was expected, a score and which detector fired:
+
+![Anomaly table with observed versus expected values, severity and detector](docs/images/anomalies.png)
+
+Security analytics scores each subject rather than just listing matches:
+
+![Security findings: credential stuffing and sensitive endpoint access by client address, with risk scores](docs/images/security.png)
 
 ---
 
