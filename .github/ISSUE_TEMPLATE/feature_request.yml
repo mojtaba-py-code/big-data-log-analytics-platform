@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a capability the platform does not have yet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to do that the platform makes hard or impossible?
+        Describe the situation, not the solution — it often turns out there is
+        a simpler answer than the one you had in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: >
+        Rough is fine. If it touches ingestion, storage or the query language,
+        say which — those three have compatibility constraints the rest do not.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Ingestion / parsers
+        - Storage / query
+        - Analytics / anomaly detection
+        - Security analytics
+        - REST API / dashboard
+        - CLI
+        - Operations (Docker, CI, config)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >
+        Workarounds you have already used, including a plugin — the platform is
+        extensible on purpose, and a new source or parser may not need a change
+        here at all. See "Extending the platform" in the README.

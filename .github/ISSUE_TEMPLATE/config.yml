@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mojtaba-py-code/big-data-log-analytics-platform/security/advisories/new
+    about: Report privately instead of opening a public issue. See SECURITY.md.
+  - name: Question or usage help
+    url: https://github.com/mojtaba-py-code/big-data-log-analytics-platform/discussions
+    about: Ask here if it is not a bug — configuration, performance tuning, or "how do I".

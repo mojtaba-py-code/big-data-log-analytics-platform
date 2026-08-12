@@ -1,5 +1,13 @@
 # Big Data Log Analytics Platform
 
+[![CI](https://github.com/mojtaba-py-code/big-data-log-analytics-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/mojtaba-py-code/big-data-log-analytics-platform/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25%20enforced%20in%20CI-brightgreen.svg)](.github/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![Typed](https://img.shields.io/badge/mypy-strict-2A6DB2.svg)](pyproject.toml)
+[![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Security](https://img.shields.io/badge/security-bandit%20%2B%20pip--audit-yellow.svg)](.github/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A production-grade Python platform for ingesting, parsing, validating, normalising,
 de-duplicating, analysing and serving very large volumes of application, server,
 network and security logs.
@@ -9,6 +17,11 @@ loads a dataset into memory, a canonical schema every source converges on, a
 dead-letter queue so nothing is ever silently dropped, columnar storage with
 partition pruning, statistical anomaly detection, security analytics with risk
 scoring, a safe query language, a REST API, a dashboard and a CLI.
+
+> **The numbers below are checked, not claimed.** Every push runs the full suite and
+> fails the build under 80 % coverage, on a `mypy --strict` error, on a `bandit`
+> finding, or on a known CVE in a dependency — see
+> [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ```
 592 tests · 87 % coverage · ruff clean · mypy --strict clean · bandit clean

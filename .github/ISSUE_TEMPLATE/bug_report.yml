@@ -1,0 +1,52 @@
+name: Bug report
+description: Something behaves differently from what the docs say
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I ran `loga ingest ./logs --format auto` on a directory of gzipped nginx
+        logs and the dead-letter queue filled with "unparseable timestamp",
+        although the same files parse fine one at a time.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The smallest command or snippet that shows the problem. A sample log
+        line that triggers it is worth more than a long description.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `loga --version`, or the commit SHA.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, and whether you are running in Docker.
+      placeholder: Python 3.12, Ubuntu 24.04, docker compose
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: >
+        Traceback or log output. Structured logs mask secrets already, but
+        please double-check before pasting.
+      render: shell
