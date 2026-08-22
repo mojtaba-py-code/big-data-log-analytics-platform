@@ -24,7 +24,7 @@ scoring, a safe query language, a REST API, a dashboard and a CLI.
 > [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ```
-601 tests · 87 % coverage · ruff clean · mypy --strict clean · bandit clean
+604 tests · 87 % coverage · ruff clean · mypy --strict clean · bandit clean
 ```
 
 ---
@@ -455,7 +455,7 @@ pytest -m performance         # streaming/memory properties (slow)
 pytest --cov=app --cov-report=html
 ```
 
-601 tests, 87 % branch coverage:
+604 tests, 87 % branch coverage:
 
 | Suite | What it proves |
 | --- | --- |
