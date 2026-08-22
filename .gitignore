@@ -4,6 +4,11 @@
 !.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+credentials.json
 secrets/
 
 # Data and generated artefacts
