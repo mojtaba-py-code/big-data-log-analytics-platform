@@ -107,7 +107,11 @@ class ParquetStore(StorageBackend):
             ensure_directory(directory)
             temp_path = directory / f".part-{run_id}.{self.extension}.tmp"
             try:
-                writer = pq.ParquetWriter(
+                # pyarrow ships py.typed but leaves pyarrow.parquet's entry
+                # points unannotated, so --strict flags every call.  Ignored
+                # per call site rather than by disabling the check for the
+                # module, which would also hide our own untyped calls.
+                writer = pq.ParquetWriter(  # type: ignore[no-untyped-call]
                     temp_path,
                     self._schema,
                     compression=self.compression,
@@ -166,11 +170,12 @@ class ParquetStore(StorageBackend):
         yielded = 0
         for path in self.paths(start, end):
             try:
-                parquet_file = pq.ParquetFile(path)
+                parquet_file = pq.ParquetFile(path)  # type: ignore[no-untyped-call]
             except Exception:  # noqa: BLE001 - skip a corrupt file, keep going
                 log.warning("skipping unreadable parquet file", extra={"file": str(path)})
                 continue
-            for batch in parquet_file.iter_batches(batch_size=10_000):
+            batches = parquet_file.iter_batches(batch_size=10_000)  # type: ignore[no-untyped-call]
+            for batch in batches:
                 for row in batch.to_pylist():
                     if start and row["timestamp"] and row["timestamp"] < start:
                         continue
@@ -195,7 +200,7 @@ class ParquetStore(StorageBackend):
         total = 0
         for path in self.paths(start, end):
             try:
-                total += pq.ParquetFile(path).metadata.num_rows
+                total += pq.ParquetFile(path).metadata.num_rows  # type: ignore[no-untyped-call]
             except Exception:  # noqa: BLE001 - a corrupt footer must not abort a count
                 log.warning("could not read parquet footer", extra={"file": str(path)})
                 continue

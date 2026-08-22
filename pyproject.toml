@@ -111,7 +111,11 @@ ignore = [
 known-first-party = ["app"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12, not 3.11: numpy's bundled stubs use PEP 695 `type` statements, which a
+# 3.11 target rejects outright and which aborts the whole run before any of
+# this project's code is checked.  Ruff still enforces the 3.11 floor
+# (`target-version = "py311"`), so 3.12-only syntax cannot slip in unnoticed.
+python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true

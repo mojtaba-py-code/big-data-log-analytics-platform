@@ -243,10 +243,14 @@ def compact_job(*, layer: str = "processed", target_mb: int = 128) -> dict[str, 
         before = sum(f.stat().st_size for f in files)
         if before > target_mb * 1024**2 * len(files):
             continue
-        table = pq.read_table(files)
+        # pyarrow.parquet's entry points carry no annotations, so --strict
+        # rejects the call itself; ignored here rather than for the module.
+        table = pq.read_table(files)  # type: ignore[no-untyped-call]
         temp = partition / ".compacted.parquet.tmp"
         ensure_directory(partition)
-        pq.write_table(table, temp, compression=settings.storage.compression)
+        pq.write_table(  # type: ignore[no-untyped-call]
+            table, temp, compression=settings.storage.compression
+        )
         for file in files:
             file.unlink()
         temp.rename(partition / "part-compacted.parquet")
