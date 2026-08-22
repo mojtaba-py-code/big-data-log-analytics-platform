@@ -64,7 +64,7 @@ scoring, a safe query language, a REST API, a dashboard and a CLI.
 | **Storage** | Hive-partitioned Parquet (zstd, dictionary-encoded) + JSONL/CSV, queried in place by DuckDB. Interface-based, so backends are swappable. |
 | **Search** | A safe expression language (`service=payment AND status_code>=500`) compiled to bound SQL parameters — injection is structurally impossible, not filtered. |
 | **API** | FastAPI with pagination, filtering, sorting, date ranges, scoped API-key auth, token-bucket rate limiting and strict security headers. |
-| **Dashboard** | A single self-contained page: no CDN, no build step, hand-drawn SVG charts that satisfy a `default-src 'self'` CSP. |
+| **Dashboard** | Self-contained: no CDN, no build step, no inline script or style, hand-drawn SVG charts that satisfy a `default-src 'self'` CSP with no `'unsafe-inline'`. |
 | **Streaming** | A near-real-time processor that reuses the same stages but schedules them for latency: flush on size *or* age, a bounded live window for sub-second dashboards, and offsets acknowledged only after a durable flush. Kafka is one optional source; the processor takes any iterable. |
 | **Operations** | Structured JSON logs with secret masking, Prometheus metrics, background jobs with retries, graceful shutdown, Docker Compose, GitHub Actions. |
 
@@ -323,10 +323,13 @@ anomalies, suspicious events), time-series charts, status distribution, top
 endpoints and addresses, per-service health, anomalies and security findings —
 with time-window, bucket-size and service filters and optional auto-refresh.
 
-It is one HTML file with hand-written SVG charting and no external requests, so
-the API can keep a strict `default-src 'self'` CSP. A dashboard that renders
-attacker-controlled log text is exactly where a relaxed CSP turns a stored XSS
-into an account takeover; every value is inserted with `textContent`.
+Hand-written SVG charting, no external requests, and no inline `<script>` or
+`<style>` — the page, its stylesheet and its script are three same-origin
+files — so the API can send `default-src 'self'` with no `'unsafe-inline'` in
+any directive. A dashboard that renders attacker-controlled log text is
+exactly where a relaxed CSP turns a stored XSS into an account takeover, and
+`script-src 'unsafe-inline'` is the part that would give the payload back its
+value; every value is also inserted with `textContent`.
 
 Below is the dashboard over the demo dataset — 117,796 records ingested from
 120,000 generated lines. The three spikes in the charts are the incidents the

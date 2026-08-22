@@ -785,6 +785,19 @@ class TestResponseHardening:
         assert "default-src 'self'" in headers["Content-Security-Policy"]
         assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
 
+    def test_csp_never_allows_inline_code(self, api_client) -> None:
+        """'unsafe-inline' in script-src is what hands XSS its payload back.
+
+        The dashboard renders attacker-controlled log text, so the policy has
+        to be worth sending: assets are same-origin files and the directives
+        name 'self' only.
+        """
+        csp = api_client.get("/health").headers["Content-Security-Policy"]
+        assert "unsafe-inline" not in csp
+        assert "unsafe-eval" not in csp
+        assert "script-src 'self';" in csp
+        assert "style-src 'self';" in csp
+
     def test_server_header_is_not_advertised(self, api_client) -> None:
         assert "server" not in {k.lower() for k in api_client.get("/health").headers}
 

@@ -225,3 +225,25 @@ class TestDashboard:
         html = api_client.get("/dashboard").text
         for marker in ("https://cdn", "http://cdn", "unpkg.com", "jsdelivr"):
             assert marker not in html
+
+    def test_dashboard_page_carries_no_inline_code(self, api_client) -> None:
+        """No inline <script>/<style>, so the CSP can drop 'unsafe-inline'."""
+        html = api_client.get("/dashboard").text
+        assert "<style" not in html
+        assert 'style="' not in html
+        assert "<script>" not in html
+
+    def test_dashboard_assets_are_served_from_the_same_origin(self, api_client) -> None:
+        html = api_client.get("/dashboard").text
+        assert '<link rel="stylesheet" href="/dashboard/dashboard.css">' in html
+        assert '<script src="/dashboard/dashboard.js" defer></script>' in html
+
+        css = api_client.get("/dashboard/dashboard.css")
+        assert css.status_code == 200
+        assert css.headers["content-type"].startswith("text/css")
+        assert "--accent" in css.text
+
+        script = api_client.get("/dashboard/dashboard.js")
+        assert script.status_code == 200
+        assert "javascript" in script.headers["content-type"]
+        assert "textContent" in script.text

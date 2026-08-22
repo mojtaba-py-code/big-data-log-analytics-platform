@@ -96,6 +96,12 @@ The dashboard inserts every value with `textContent`, never `innerHTML`, and the
 API sends `Content-Security-Policy: default-src 'self'` with
 `object-src 'none'` and `frame-ancestors 'none'`.
 
+No directive carries `'unsafe-inline'`. The dashboard's stylesheet and script
+are separate same-origin files precisely so that `script-src` can stay
+`'self'`: with `'unsafe-inline'` the policy would still block a remote payload
+but not an injected `<script>` or event-handler attribute, which is the case
+that matters on a page rendering attacker-controlled log text.
+
 **Tests:** `TestSearchInjection` (22), `TestDatabaseIdentifierValidation` (9).
 
 ---

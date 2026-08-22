@@ -395,16 +395,19 @@ def _rate_limit_key(request: Request, settings: Settings) -> str:
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Adds defensive response headers.
 
-    The dashboard is served from this same origin, so the CSP allows inline
-    styles and scripts for it — everything else (external hosts, framing,
-    plugins) is denied.  ``connect-src 'self'`` means a compromised dashboard
-    script cannot exfiltrate query results to another origin.
+    The dashboard's stylesheet and script are separate same-origin files, so
+    the policy needs no ``'unsafe-inline'`` anywhere: ``script-src 'self'``
+    means an injected ``<script>`` or event-handler attribute in a log message
+    does not execute, which is the whole reason to send a CSP on a page that
+    renders attacker-controlled text.  ``connect-src 'self'`` means a
+    compromised dashboard script cannot exfiltrate query results to another
+    origin, and everything else (external hosts, framing, plugins) is denied.
     """
 
     CSP: Final[str] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
         "img-src 'self' data:; "
         "connect-src 'self'; "
         "font-src 'self'; "
