@@ -102,7 +102,7 @@ are separate same-origin files precisely so that `script-src` can stay
 but not an injected `<script>` or event-handler attribute, which is the case
 that matters on a page rendering attacker-controlled log text.
 
-**Tests:** `TestSearchInjection` (22), `TestDatabaseIdentifierValidation` (9).
+**Tests:** `TestSearchInjection` (29), `TestDatabaseIdentifierValidation` (9).
 
 ---
 
@@ -155,7 +155,7 @@ SQL fragments, hostnames — is logged, never returned. Unexpected exceptions
 become a generic 500. Search syntax errors are the one exception: their message
 is safe because it only ever describes the client's own input.
 
-**Tests:** `TestSecretHandling` (7), including one that greps the written Parquet
+**Tests:** `TestSecretHandling` (10), including one that greps the written Parquet
 bytes for the exact credentials the generator injected.
 
 ---
@@ -228,8 +228,8 @@ service from the load balancer exactly when it is already under pressure.
 CORS is closed by default; wildcard origins are refused in production.
 `allow_credentials` is false — the API uses bearer tokens, not cookies.
 
-**Tests:** `TestAuthentication` (8), `TestAuthorization` (4),
-`TestPrincipalCaching` (4), `TestRateLimiting` (6), `TestResponseHardening` (4).
+**Tests:** `TestAuthentication` (11), `TestAuthorization` (4),
+`TestPrincipalCaching` (4), `TestRateLimiting` (6), `TestResponseHardening` (5).
 
 ---
 
@@ -274,7 +274,7 @@ network next to a cloud metadata service.
 log API is legitimate. It must be enabled deliberately, and the platform logs
 loudly when it is.
 
-**Tests:** `TestPathTraversal` (17), `TestSsrf` (11).
+**Tests:** `TestPathTraversal` (17), `TestSsrf` (12).
 
 ---
 
