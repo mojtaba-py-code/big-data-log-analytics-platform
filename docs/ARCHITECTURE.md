@@ -391,4 +391,4 @@ is remote code execution waiting to happen.
 | Fail-safe | Bad records are dead-lettered; bad runs abort; signals stop gracefully. |
 | Idempotency | Deterministic ids and run-scoped filenames. |
 | Observability | Structured logs, per-stage metrics, run history, DLQ reasons. |
-| Testability | 569 tests; every stage constructible in isolation. |
+| Testability | 604 tests; every stage constructible in isolation. |
