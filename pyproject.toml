@@ -128,6 +128,15 @@ module = ["tests.*", "benchmarks.*", "scripts.*"]
 disallow_untyped_defs = false
 strict = false
 
+# pyarrow annotates `pyarrow.parquet` from 25.0 onwards; the declared floor is
+# 16.0.  The two modules that call it therefore need `# type: ignore
+# [no-untyped-call]` on an older pyarrow and must not have it on a newer one,
+# which no single source file can satisfy.  Keeping the comments and not
+# warning about them here is the one form that type-checks on both.
+[[tool.mypy.overrides]]
+module = ["app.storage.parquet_store", "app.workers.jobs"]
+warn_unused_ignores = false
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
