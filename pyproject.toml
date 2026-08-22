@@ -61,8 +61,8 @@ dev = [
 loganalytics = "app.cli.main:run"
 
 [project.urls]
-Homepage = "https://github.com/mojtaba-py-code/big-data-log-analytics"
-Documentation = "https://github.com/mojtaba-py-code/big-data-log-analytics/tree/main/docs"
+Homepage = "https://github.com/mojtaba-py-code/big-data-log-analytics-platform"
+Documentation = "https://github.com/mojtaba-py-code/big-data-log-analytics-platform/tree/main/docs"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

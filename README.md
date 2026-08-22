@@ -128,8 +128,8 @@ where it is.
 Requires Python 3.11+.
 
 ```bash
-git clone https://github.com/mojtaba-py-code/big-data-log-analytics.git
-cd big-data-log-analytics
+git clone https://github.com/mojtaba-py-code/big-data-log-analytics-platform.git
+cd big-data-log-analytics-platform
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
