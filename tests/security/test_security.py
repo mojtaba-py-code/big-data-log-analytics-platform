@@ -672,6 +672,44 @@ class TestSecretHandling:
         ):
             assert secret not in stored
 
+    def test_generated_credentials_are_injected_and_then_redacted(
+        self, settings: Settings, tmp_path: Path
+    ) -> None:
+        """What scripts/demo_end_to_end.py reports, asserted instead of printed.
+
+        `include_secrets` on its own is a ~0.1 % draw per record, so a small
+        dataset can contain no credential at all — and "none found in storage"
+        then proves nothing.  `credential_records` guarantees a floor, so the
+        absence downstream is evidence that masking removed them.
+        """
+        from app.pipeline import LogPipeline, PipelineOptions
+        from app.synthetic import INJECTED_CREDENTIAL_VALUES, generate_dataset
+
+        path = tmp_path / "raw" / "generated.log"
+        generate_dataset(
+            path,
+            count=400,
+            fmt="json",
+            credential_records=4 * len(INJECTED_CREDENTIAL_VALUES),
+        )
+
+        raw = path.read_text(encoding="utf-8")
+        for value in INJECTED_CREDENTIAL_VALUES:
+            assert value in raw, "the generator must actually inject every credential"
+
+        LogPipeline(settings).run(path, PipelineOptions(run_id="generated"))
+
+        # Read the rows back rather than grepping the file: Parquet is
+        # compressed, so a byte scan can miss a surviving credential.
+        from app.storage import build_store
+
+        store = build_store(settings.processed_path, settings)
+        messages = " ".join(str(row.get("message", "")) for row in store.read())
+        assert messages, "nothing was written, so nothing was proved"
+        assert REDACTED in messages, "masked, not merely dropped"
+        for value in INJECTED_CREDENTIAL_VALUES:
+            assert value not in messages
+
     def test_dead_letter_payloads_are_masked(self, settings: Settings, tmp_path: Path) -> None:
         from app.pipeline import LogPipeline, PipelineOptions
 

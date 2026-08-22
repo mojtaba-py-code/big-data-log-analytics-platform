@@ -36,14 +36,21 @@ from app.analytics import AnalyticsEngine, SecurityAnalyzer  # noqa: E402
 from app.analytics.reports import ReportBuilder, save_report  # noqa: E402
 from app.anomaly_detection import AnomalyService  # noqa: E402
 from app.core.config import load_settings  # noqa: E402
+from app.core.masking import REDACTED  # noqa: E402
 from app.core.timeutil import to_iso, utcnow  # noqa: E402
 from app.pipeline import LogPipeline, PipelineOptions  # noqa: E402
 from app.search import SearchService  # noqa: E402
 from app.storage import DuckDBEngine, MetadataStore  # noqa: E402
-from app.synthetic import generate_dataset  # noqa: E402
+from app.synthetic import INJECTED_CREDENTIAL_VALUES, generate_dataset  # noqa: E402
 from app.validation.dlq import rejection_stats  # noqa: E402
 
 STEP = 0
+
+#: Credential-bearing records forced into the dataset.  The generator's own
+#: ~0.1 % chance can inject none at all, and a redaction check that passes
+#: because nothing was there to redact proves nothing.  Enough of them that
+#: every value survives the malformed-line and bad-timestamp rates.
+CREDENTIAL_RECORDS = 40
 
 
 def step(title: str) -> None:
@@ -88,12 +95,18 @@ def main() -> int:
 
     # ---------------------------------------------------------------- 1 ---- #
     step(f"Generate {args.records:,} synthetic log records")
-    source = workspace / "raw" / f"application.{'log' if args.format != 'csv' else 'csv'}"
+    raw_source = workspace / "raw" / f"application.{'log' if args.format != 'csv' else 'csv'}"
     generation_started = time.perf_counter()
-    generate_dataset(source, count=args.records, fmt=args.format, duration_hours=24)
+    generate_dataset(
+        raw_source,
+        count=args.records,
+        fmt=args.format,
+        duration_hours=24,
+        credential_records=CREDENTIAL_RECORDS,
+    )
     generation_seconds = time.perf_counter() - generation_started
-    size_mb = source.stat().st_size / 1024**2
-    bullet("file", source)
+    size_mb = raw_source.stat().st_size / 1024**2
+    bullet("file", raw_source)
     bullet("size", f"{size_mb:,.1f} MiB")
     bullet("generation time", f"{generation_seconds:,.1f} s")
     print(
@@ -106,9 +119,9 @@ def main() -> int:
     step("Ingest: parse -> clean -> normalise -> enrich -> validate -> dedup -> Parquet")
     metadata = MetadataStore.from_settings(settings)
     metadata.create_schema()
-    metadata.start_run("demo", sources=[str(source)])
+    metadata.start_run("demo", sources=[str(raw_source)])
 
-    result = LogPipeline(settings).run(source, PipelineOptions(run_id="demo"))
+    result = LogPipeline(settings).run(raw_source, PipelineOptions(run_id="demo"))
     metadata.finish_run(result)
 
     bullet("lines read", f"{result.lines_read:,}")
@@ -153,9 +166,9 @@ def main() -> int:
     bullet("last event", to_iso(summary["last_event"]) if summary["last_event"] else "-")
 
     query_started = time.perf_counter()
-    source, scan_params = engine.scan()
+    scan_target, scan_params = engine.scan()
     top = engine.execute(
-        f"SELECT service, COUNT(*) AS n FROM {source} "  # noqa: S608 - constant fragment
+        f"SELECT service, COUNT(*) AS n FROM {scan_target} "  # noqa: S608 - constant fragment
         "GROUP BY 1 ORDER BY 2 DESC LIMIT 5",
         scan_params,
     )
@@ -248,21 +261,50 @@ def main() -> int:
 
     # --------------------------------------------------------------- 10 ---- #
     step("Verify: no secrets reached storage")
-    # The generator injects these exact values into ~0.1% of records.  The
-    # check looks for the *values*, not the field names: a stored
-    # "password=***REDACTED***" is the correct outcome, so searching for
-    # "password=" would report a leak that is not one.
-    secrets = (
-        b"Sup3rS3cret!",
-        b"sk_live_1234567890abcdefghij",
-        b"eyJhbGciOiJIUzI1NiJ9",
-        b"someone@example.test",
-    )
-    stored = b"".join(f.read_bytes() for f in settings.processed_path.rglob("*.parquet"))
-    leaked = [needle.decode() for needle in secrets if needle in stored]
-    bullet("injected credentials", len(secrets))
-    bullet("found in Parquet", leaked or "none - all redacted on ingest")
-    bullet("redaction markers present", b"REDACTED" in stored)
+    # Three checks, and only the three together mean anything:
+    #   1. the credentials really were in the raw log — otherwise "none found
+    #      downstream" proves nothing at all;
+    #   2. not one of them can be read back out of storage;
+    #   3. the redaction marker can be, so they were masked rather than merely
+    #      dropped on the floor.
+    # Storage is read back through the query engine rather than grepped as
+    # bytes: Parquet is zstd-compressed, so a byte scan can miss both a
+    # surviving credential and the marker.  The check looks for the *values*,
+    # not the field names — a stored "password=***REDACTED***" is the correct
+    # outcome, so searching for "password=" would report a leak that is not one.
+    unseen = {value.encode() for value in INJECTED_CREDENTIAL_VALUES}
+    with raw_source.open("rb") as handle:
+        for line in handle:
+            unseen = {needle for needle in unseen if needle not in line}
+            if not unseen:
+                break
+
+    def stored_matches(text: str) -> int:
+        """Records whose message or raw line still contains ``text``."""
+        return search.search(f'"{text}"', start=start, end=end, page_size=1).total
+
+    leaked = [value for value in INJECTED_CREDENTIAL_VALUES if stored_matches(value)]
+    redacted = stored_matches(REDACTED)
+
+    bullet("credential records forced in", CREDENTIAL_RECORDS)
+    injected = len(INJECTED_CREDENTIAL_VALUES) - len(unseen)
+    bullet("distinct credentials in raw log", f"{injected} of {len(INJECTED_CREDENTIAL_VALUES)}")
+    bullet("readable back from storage", leaked or "none - all redacted on ingest")
+    bullet("records with a redaction marker", f"{redacted:,}")
+
+    if unseen:
+        raise SystemExit(
+            "FAILED: the generator did not write "
+            f"{sorted(needle.decode() for needle in unseen)} into {raw_source} - "
+            "the redaction check would have been vacuous."
+        )
+    if leaked:
+        raise SystemExit(f"FAILED: credentials survived ingestion unredacted: {leaked}")
+    if not redacted:
+        raise SystemExit(
+            "FAILED: no redaction marker in storage — the credentials were "
+            "dropped rather than masked, so masking is not what protected them."
+        )
 
     total = time.perf_counter() - started
     print(f"\n{'=' * 74}\n  Demo complete in {total:,.1f} s")

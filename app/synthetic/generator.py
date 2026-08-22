@@ -127,6 +127,30 @@ INFO_MESSAGES: Final[tuple[str, ...]] = (
 #: RFC 5737 documentation ranges — safe to publish, never routed.
 _DOC_PREFIXES: Final[tuple[str, ...]] = ("192.0.2.", "198.51.100.", "203.0.113.")
 
+#: The credential values an application might carelessly log.  Fabricated, and
+#: kept here as the single definition so that anything asserting "this never
+#: reached storage" greps for the same strings the generator actually wrote.
+INJECTED_CREDENTIAL_VALUES: Final[tuple[str, ...]] = (
+    "eyJhbGciOiJIUzI1NiJ9",
+    "Sup3rS3cret!",
+    "sk_live_1234567890abcdefghij",
+    "someone@example.test",
+)
+
+_CREDENTIAL_TEMPLATES: Final[tuple[str, ...]] = (
+    "Authorization: Bearer {}.eyJzdWIiOiIxIn0.aaaaaaaaaaaaaaaaaaaa",
+    "password={}",
+    "api_key={}",
+    "user={}",
+)
+
+#: The full fragments appended to a message.  Built from the values above, so
+#: every value is guaranteed to be a substring of what was written.
+INJECTED_CREDENTIALS: Final[tuple[str, ...]] = tuple(
+    template.format(value)
+    for template, value in zip(_CREDENTIAL_TEMPLATES, INJECTED_CREDENTIAL_VALUES, strict=True)
+)
+
 
 @dataclass(slots=True)
 class GeneratorConfig:
@@ -149,6 +173,11 @@ class GeneratorConfig:
     brute_force_attacks: int = 3
     scanning_attacks: int = 2
     include_secrets: bool = True
+    #: Credential-bearing records placed at fixed positions, cycling through
+    #: :data:`INJECTED_CREDENTIALS` so each value appears.  ``include_secrets``
+    #: alone is a ~0.1 % coin flip, which can come up zero on a small dataset;
+    #: a check that must prove redaction happened needs a guaranteed floor.
+    credential_records: int = 0
     unique_ips: int = 400
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -397,19 +426,29 @@ class LogGenerator:
             return "not-a-log-line at all " + str(self.random.random())
         return line + " " + "x" * self.random.randint(100, 400)
 
-    def _with_secret(self, record: dict[str, Any]) -> dict[str, Any]:
-        """Occasionally log a credential — the masking pipeline must catch it."""
-        secret = self.random.choice(
-            [
-                "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.aaaaaaaaaaaaaaaaaaaa",
-                "password=Sup3rS3cret!",
-                "api_key=sk_live_1234567890abcdefghij",
-                "user=someone@example.test",
-            ]
-        )
+    def _with_secret(self, record: dict[str, Any], credential: str | None = None) -> dict[str, Any]:
+        """Log a credential — the masking pipeline must catch it."""
+        chosen = credential if credential is not None else self.random.choice(INJECTED_CREDENTIALS)
         record = dict(record)
-        record["message"] = f"{record['message']} {secret}"
+        record["message"] = f"{record['message']} {chosen}"
         return record
+
+    def _credential_positions(self) -> dict[int, str]:
+        """Fixed positions for the guaranteed credential-bearing records.
+
+        Spread arithmetically rather than sampled, so asking for them does not
+        perturb the PRNG and a given seed still produces the same dataset.
+        """
+        wanted = min(max(0, self.config.credential_records), self.config.count)
+        if wanted == 0:
+            return {}
+        step = self.config.count / wanted
+        return {
+            min(self.config.count - 1, int(i * step)): INJECTED_CREDENTIALS[
+                i % len(INJECTED_CREDENTIALS)
+            ]
+            for i in range(wanted)
+        }
 
     # -- iteration -------------------------------------------------------------- #
     def records(self) -> Iterator[dict[str, Any]]:
@@ -421,11 +460,15 @@ class LogGenerator:
             )
         )
         attack_map = dict(zip(attack_positions, attacks, strict=False))
+        credentials = self._credential_positions()
 
         for index in range(self.config.count):
             injected = attack_map.get(index)
             record = injected if injected is not None else self._base_record(index)
-            if self.config.include_secrets and self.random.random() < 0.001:
+            forced = credentials.get(index)
+            if forced is not None:
+                record = self._with_secret(record, forced)
+            elif self.config.include_secrets and self.random.random() < 0.001:
                 record = self._with_secret(record)
             if self.random.random() < self.config.invalid_timestamp_rate:
                 record = {**record, "timestamp_override": "not-a-timestamp"}
@@ -492,6 +535,8 @@ def generate_dataset(
 
 __all__ = [
     "ENDPOINTS",
+    "INJECTED_CREDENTIALS",
+    "INJECTED_CREDENTIAL_VALUES",
     "SERVICES",
     "GeneratorConfig",
     "LogGenerator",

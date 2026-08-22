@@ -152,8 +152,8 @@ python scripts/demo_end_to_end.py --records 200000 --serve
 
 That generates a realistic dataset (with injected incidents and attacks), runs the
 full pipeline, queries it, detects the anomalies, scores the attacks, writes a
-report, proves no credential reached storage, and leaves the API and dashboard
-running on <http://127.0.0.1:8000/dashboard>.
+report, proves no credential reached storage — exiting non-zero if it cannot —
+and leaves the API and dashboard running on <http://127.0.0.1:8000/dashboard>.
 
 Real output from a 120,000-record run on a 2014 dual-core laptop — abridged, but
 the numbers are not adjusted:
@@ -186,9 +186,10 @@ STEP 8: Search
       endpoint~/api/v1/*                112,791 matches in    115 ms
 
 STEP 10: Verify: no secrets reached storage
-    injected credentials               4
-    found in Parquet                   none - all redacted on ingest
-    redaction markers present          True
+    credential records forced in       40
+    distinct credentials in raw log    4 of 4
+    readable back from storage         none - all redacted on ingest
+    records with a redaction marker    170
 
   Demo complete in 114.4 s
 ```
