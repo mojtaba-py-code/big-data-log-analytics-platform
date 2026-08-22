@@ -392,7 +392,9 @@ if it is already running or finished.
 
 ## Dashboard
 
-`GET /dashboard` — a single self-contained HTML page (see the README). Enter the
+`GET /dashboard` — a self-contained page with no external requests (see the
+README); its stylesheet and script are served alongside it from this same
+origin, at `/dashboard/dashboard.css` and `/dashboard/dashboard.js`. Enter the
 API key in the header field; it is kept in `sessionStorage`, so it dies with the
 tab.
 
