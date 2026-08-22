@@ -449,7 +449,7 @@ Threat model, control-by-control detail and reporting process:
 
 ```bash
 pytest                        # fast suite (unit + integration + security)
-pytest -m unit                # 215 fast isolated tests
+pytest -m unit                # 218 fast isolated tests
 pytest -m security            # 115 security regression tests
 pytest -m performance         # streaming/memory properties (slow)
 pytest --cov=app --cov-report=html
