@@ -436,8 +436,10 @@ class LogGenerator:
     def _credential_positions(self) -> dict[int, str]:
         """Fixed positions for the guaranteed credential-bearing records.
 
-        Spread arithmetically rather than sampled, so asking for them does not
-        perturb the PRNG and a given seed still produces the same dataset.
+        Spread arithmetically rather than sampled, so choosing them costs no
+        PRNG draws; :meth:`records` then spends the same draws per record
+        whether or not a position is forced.  A given seed therefore still
+        produces the same dataset apart from the forced records themselves.
         """
         wanted = min(max(0, self.config.credential_records), self.config.count)
         if wanted == 0:
@@ -465,11 +467,14 @@ class LogGenerator:
         for index in range(self.config.count):
             injected = attack_map.get(index)
             record = injected if injected is not None else self._base_record(index)
+            # Draw for the ~0.1 % coin flip even where a credential is forced,
+            # so the stream stays aligned with a run that asked for none.
+            sampled = self.config.include_secrets and self.random.random() < 0.001
+            chosen = self.random.choice(INJECTED_CREDENTIALS) if sampled else None
             forced = credentials.get(index)
-            if forced is not None:
-                record = self._with_secret(record, forced)
-            elif self.config.include_secrets and self.random.random() < 0.001:
-                record = self._with_secret(record)
+            credential = forced if forced is not None else chosen
+            if credential is not None:
+                record = self._with_secret(record, credential)
             if self.random.random() < self.config.invalid_timestamp_rate:
                 record = {**record, "timestamp_override": "not-a-timestamp"}
             yield record
