@@ -24,7 +24,7 @@ scoring, a safe query language, a REST API, a dashboard and a CLI.
 > [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ```
-592 tests · 87 % coverage · ruff clean · mypy --strict clean · bandit clean
+601 tests · 87 % coverage · ruff clean · mypy --strict clean · bandit clean
 ```
 
 ---
@@ -449,13 +449,13 @@ Threat model, control-by-control detail and reporting process:
 
 ```bash
 pytest                        # fast suite (unit + integration + security)
-pytest -m unit                # 211 fast isolated tests
-pytest -m security            # 100 security regression tests
+pytest -m unit                # 215 fast isolated tests
+pytest -m security            # 115 security regression tests
 pytest -m performance         # streaming/memory properties (slow)
 pytest --cov=app --cov-report=html
 ```
 
-592 tests, 87 % branch coverage:
+601 tests, 87 % branch coverage:
 
 | Suite | What it proves |
 | --- | --- |
