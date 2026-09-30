@@ -10,7 +10,7 @@ on:
   # pip-audit weekly so a CVE published against a pinned dependency shows up
   # here rather than in someone else's incident report.
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "48 6 * * 1"
 
 # Least privilege: the pipeline only reads the repository.  Jobs that need more
 # (publishing, releases) request it explicitly.
